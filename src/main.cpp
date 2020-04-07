@@ -100,11 +100,20 @@ std::string resolveAaaaRecord(const std::string &domainName) {
  * @return Domain name
  */
 std::string resolvePtrRecord(const std::string &address) {
-	struct sockaddr_in sa;
+    struct addrinfo hints, *result;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    int retVal = getaddrinfo(address.c_str(), nullptr, &hints, &result);
+    if (retVal == EAI_NONAME) {
+        throw std::domain_error("");
+    }
+    if (retVal != 0) {
+        throw std::exception();
+    }
 	char node[NI_MAXHOST];
-	sa.sin_family = AF_INET;
-	inet_pton(AF_INET, address.c_str(), &sa.sin_addr);
-	int retVal = getnameinfo((struct sockaddr *) &sa, sizeof(sa), node, sizeof(node), nullptr, 0, NI_IDN | NI_NAMEREQD);
+    size_t resultLen = result->ai_family == AF_INET6 ? sizeof(sockaddr_in6) : sizeof(sockaddr_in);
+	retVal = getnameinfo(result->ai_addr, resultLen, node, sizeof(node), nullptr, 0, NI_IDN | NI_NAMEREQD);
+	freeaddrinfo(result);
 	if (retVal == EAI_NONAME) {
 		throw std::domain_error("");
 	}
@@ -230,11 +239,11 @@ std::string processPost(const std::string &path, std::istringstream &iss) {
  */
 void startServer(uint16_t port) {
 	int clientSocket;
-	struct sockaddr_in address = {};
+	struct sockaddr_in6 address = {};
 	int opt = 1;
 	socklen_t addressLen = sizeof(address);
 
-	serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	serverSocket = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
 	if (serverSocket == 0) {
 		perror("socket failed");
 		exit(EXIT_FAILURE);
@@ -244,9 +253,9 @@ void startServer(uint16_t port) {
 		perror("setsockopt");
 		exit(EXIT_FAILURE);
 	}
-	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;
-	address.sin_port = htons(port);
+	address.sin6_family = AF_INET6;
+	address.sin6_addr = IN6ADDR_ANY_INIT;
+	address.sin6_port = htons(port);
 
 	if (bind(serverSocket, (struct sockaddr *) &address, sizeof(address)) < 0) {
 		close(serverSocket);
@@ -308,7 +317,6 @@ void signalHandler(int signal) {
 		close(serverSocket);
 	}
 }
-
 
 /**
  * Main function
